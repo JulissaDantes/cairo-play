@@ -5,6 +5,7 @@
 
 from starkware.cairo.common.cairo_builtins import HashBuiltin, SignatureBuiltin, BitwiseBuiltin
 from starkware.cairo.common.cairo_secp.bigint import BigInt3
+from starkware.cairo.common.alloc import alloc
 from starkware.cairo.common.cairo_secp.signature import verify_eth_signature
 from openzeppelin.account.library import (
     AccountCallArray,
@@ -84,7 +85,7 @@ end
 # Business logic
 #
 
-@external
+@view
 func is_valid_eth_signature{
             syscall_ptr : felt*,
             pedersen_ptr : HashBuiltin*,
@@ -96,6 +97,7 @@ func is_valid_eth_signature{
             signature: BigInt3*,
             nonce: felt
         ) -> ():
+        alloc_locals
         let (_public_key) = get_public_key()
         let (_current_nonce) = get_nonce()
 
@@ -108,12 +110,15 @@ func is_valid_eth_signature{
         # But this implementation does, and it expects a (sig_r, sig_s) pair.
         let sig_r = signature[0]
         let sig_s = signature[1]
+        
+        let (local keccak_ptr : felt*) = alloc()
+        let keccak_ptr_start = keccak_ptr
 
-        verify_eth_signature(
+        verify_eth_signature{keccak_ptr=keccak_ptr}(
             msg_hash=hash,
             r=sig_r,
             s=sig_s,
-            v=0,
+            v=1,
             eth_address=_public_key)
 
         return ()
