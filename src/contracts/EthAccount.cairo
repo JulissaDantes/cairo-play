@@ -3,9 +3,10 @@
 
 %lang starknet
 
-from starkware.cairo.common.cairo_builtins import HashBuiltin, SignatureBuiltin
+from starkware.cairo.common.cairo_builtins import HashBuiltin, SignatureBuiltin, BitwiseBuiltin
+from starkware.cairo.common.cairo_secp.bigint import BigInt3
 from starkware.cairo.common.cairo_secp.signature import verify_eth_signature
-(
+from openzeppelin.account.library import (
     AccountCallArray,
     Account_execute,
     Account_get_nonce,
@@ -14,6 +15,7 @@ from starkware.cairo.common.cairo_secp.signature import verify_eth_signature
     Account_set_public_key,
     Account_is_valid_signature
 )
+
 from openzeppelin.introspection.ERC165 import ERC165_supports_interface 
 
 #
@@ -87,15 +89,15 @@ func is_valid_eth_signature{
             syscall_ptr : felt*,
             pedersen_ptr : HashBuiltin*,
             range_check_ptr,
-            ecdsa_ptr: SignatureBuiltin*
+            bitwise_ptr: BitwiseBuiltin*
         }(
-            hash: felt,
+            hash: BigInt3,
             signature_len: felt,
-            signature: felt*,
+            signature: BigInt3*,
             nonce: felt
         ) -> ():
-        let (_public_key) = Account_public_key.read()
-        let (_current_nonce) = Account_current_nonce.read()
+        let (_public_key) = get_public_key()
+        let (_current_nonce) = get_nonce()
 
         # validate nonce
         assert _current_nonce = nonce
@@ -111,6 +113,7 @@ func is_valid_eth_signature{
             msg_hash=hash,
             r=sig_r,
             s=sig_s,
+            v=0,
             eth_address=_public_key)
 
         return ()
