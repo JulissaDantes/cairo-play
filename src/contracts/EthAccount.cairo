@@ -85,7 +85,6 @@ end
 # Business logic
 #
 
-@view
 func is_valid_eth_signature{
             syscall_ptr : felt*,
             pedersen_ptr : HashBuiltin*,
