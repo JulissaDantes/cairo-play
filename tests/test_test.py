@@ -18,15 +18,19 @@ pubk = pk.public_key.to_checksum_address()
 IACCOUNT_ID = 0xf10dbd44
 TRUE = 1
 
-def signing(account):
-    message_to_hash = b'testing a message hash'
-    #must get account, call_array, calldata, nonce, max_fee
-    hash = get_transaction_hash(account.address, [], [], 0, 0)
+async def signing(account, calls, nonce=None, max_fee=0):
+    if nonce is None:
+            execution_info = await account.get_nonce().call()
+            nonce, = execution_info.result
+
+    build_calls = []
+    for call in calls:
+        build_call = list(call)
+        build_call[0] = hex(build_call[0])
+        build_calls.append(build_call)
+    (call_array, calldata) = from_call_to_call_array(build_calls)
+    hash = get_transaction_hash(account.contract_address, call_array, calldata, nonce, max_fee)
     print(hash,'im getiing this as a hashy''all')
-    #2828821075934055852220125569300886328237608189494176769220760037777757219766
-    #of course is different Iam pasing a changing param
-    #todo revisit original implementatiomn
-    #with static param: 2756949966536968755053797530078455186503706923552182306731355083062150328381
     signature = pk.sign_msg_hash(message_to_hash)
     sig_r = to_uint(signature.r)
     sig_s = to_uint(signature.s)
