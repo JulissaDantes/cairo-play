@@ -3,71 +3,46 @@
 
 %lang starknet
 
+from starkware.cairo.common.registers import get_fp_and_pc
 from starkware.cairo.common.cairo_builtins import HashBuiltin, SignatureBuiltin, BitwiseBuiltin
 from starkware.cairo.common.cairo_secp.signature import verify_eth_signature_uint256, public_key_point_to_eth_address, recover_public_key
 from starkware.cairo.common.alloc import alloc
+from starkware.starknet.common.syscalls import call_contract, get_caller_address, get_tx_info
 from starkware.cairo.common.cairo_secp.ec import EcPoint
 from starkware.cairo.common.cairo_secp.bigint import BigInt3, uint256_to_bigint, bigint_to_uint256
 from starkware.cairo.common.uint256 import Uint256
+from starkware.cairo.common.math import split_felt
 
 @external
-func _verify_eth_signature_uint256{
+func is_valid_eth_signature{
             syscall_ptr : felt*,
             pedersen_ptr : HashBuiltin*,
             range_check_ptr,
             bitwise_ptr: BitwiseBuiltin*
         }(
-            public_key: felt,
-            hash: Uint256,
-            sig_v: felt,
-            sig_r: Uint256,
-            sig_s: Uint256
-        ) -> ():
+            eth_address: felt
+        ) -> (res : felt):
         alloc_locals
+        let (__fp__, _) = get_fp_and_pc()
+        let (tx_info) = get_tx_info()
+        let sig_v: felt = tx_info.signature[0]
+        local sig_r : Uint256 = Uint256(low=tx_info.signature[1], high=tx_info.signature[2])
+        local sig_s : Uint256 = Uint256(low=tx_info.signature[3], high=tx_info.signature[4])
+        local msg_hash : Uint256 = Uint256(low=tx_info.signature[5], high=tx_info.signature[6])
         
         let (local keccak_ptr : felt*) = alloc()
-        let keccak_ptr_start = keccak_ptr
+        with keccak_ptr:
+            with_attr error_message(
+                "The signature is not working"):
+            verify_eth_signature_uint256(
+                msg_hash=msg_hash,
+                r=sig_r,
+                s=sig_s,
+                v=sig_v,
+                eth_address=eth_address)
+            end            
+        end
 
-        verify_eth_signature_uint256{keccak_ptr=keccak_ptr}(
-            msg_hash=hash,
-            r=sig_r,
-            s=sig_s,
-            v=sig_v,
-            eth_address=public_key)
-
-        return ()
-end
-@external
-func get_key{
-            syscall_ptr : felt*,
-            pedersen_ptr : HashBuiltin*,
-            range_check_ptr,
-            bitwise_ptr: BitwiseBuiltin*
-        }(
-        ux: Uint256,
-        uy: Uint256
-        ) -> (eth_address: felt):
-        alloc_locals  
-        let x : BigInt3 = uint256_to_bigint(ux)
-        let y : BigInt3 = uint256_to_bigint(uy)
-        let (local keccak_ptr : felt*) = alloc()
-        let keccak_ptr_start = keccak_ptr
-        let point : EcPoint = EcPoint(x=x,y=y)
-        let eth_address : felt = public_key_point_to_eth_address{keccak_ptr=keccak_ptr}(point)
-        return (eth_address)
+        return (1)
     end
 
-    @external
-    func _recover_public_key{range_check_ptr}(
-    umsg_hash : Uint256, ur : Uint256, us : Uint256, v : felt
-    ) -> (x : Uint256, y: Uint256):
-        let r : BigInt3 = uint256_to_bigint(ur)
-        let s : BigInt3 = uint256_to_bigint(us)
-        let msg_hash : BigInt3 = uint256_to_bigint(umsg_hash)
-        let (public_key_point : EcPoint) = recover_public_key(msg_hash,r,s,v)
-        let x: Uint256 = bigint_to_uint256(public_key_point.x)
-        let y: Uint256 = bigint_to_uint256(public_key_point.y)
-        return (x, y)
-    end
-
-    

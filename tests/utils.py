@@ -211,7 +211,7 @@ class TestEthSigner():
     """
     def __init__(self, private_key):
         self.signer = eth_keys.keys.PrivateKey(private_key)        
-        self.public_key = int(self.signer.public_key.to_address(), 16)
+        self.public_key = int(self.signer.public_key.to_checksum_address(),0)
         
     async def send_transaction(self, account, to, selector_name, calldata, nonce=None, max_fee=0):
         return await self.send_transactions(account, [(to, selector_name, calldata)], nonce, max_fee)
@@ -231,8 +231,13 @@ class TestEthSigner():
         message_hash = get_transaction_hash(
             account.contract_address, call_array, calldata, nonce, max_fee
         )
-        signature = self.signer.sign_msg_hash(bytes.fromhex(hex(message_hash)[0][2:]))
+        k = keccak.new(digest_bits=256)
+        k.update(b'some message')
+        #signature = self.signer.sign_msg_hash(bytes.fromhex(hex(message_hash)[0][2:]))
+        hash = to_uint(int(k.hexdigest(), 16))
+        signature = self.signer.sign_msg_hash(k.digest())
+        print('0x'+k.hexdigest(), signature, self.public_key, self.signer.public_key, self.signer.public_key.to_checksum_address())
         sig_r = to_uint(signature.r)
         sig_s = to_uint(signature.s)
-        return await account.__execute__(call_array, calldata, nonce).invoke(signature=[signature.v, sig_r[0], sig_r[1], sig_s[0], sig_s[1]])
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+        return await account.__execute__(call_array, calldata, nonce).invoke(signature=[signature.v, sig_r[0], sig_r[1], sig_s[0], sig_s[1], hash[0], hash[1]])
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                

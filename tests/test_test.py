@@ -8,33 +8,25 @@ from utils import TestSigner, assert_revert, contract_path
 from eth_keys import keys
 import eth_keys
 import sys
+from Crypto.Hash import keccak
 from nile.signer import Signer, from_call_to_call_array, get_transaction_hash
 
 private_key = b'\x01' * 32
 pk = eth_keys.keys.PrivateKey(private_key)        
-pubk = pk.public_key.to_checksum_address()
+eth_address = pk.public_key.to_checksum_address()
 
 
 IACCOUNT_ID = 0xf10dbd44
 TRUE = 1
 
-async def signing(account, calls, nonce=None, max_fee=0):
-    if nonce is None:
-            execution_info = await account.get_nonce().call()
-            nonce, = execution_info.result
+def from_uint(uint):
+    """Takes in uint256-ish tuple, returns value."""
+    return uint[0] + (uint[1] << 128)
 
-    build_calls = []
-    for call in calls:
-        build_call = list(call)
-        build_call[0] = hex(build_call[0])
-        build_calls.append(build_call)
-    (call_array, calldata) = from_call_to_call_array(build_calls)
-    hash = get_transaction_hash(account.contract_address, call_array, calldata, nonce, max_fee)
-    print(hash,'im getiing this as a hashy''all')
-    signature = pk.sign_msg_hash(message_to_hash)
-    sig_r = to_uint(signature.r)
-    sig_s = to_uint(signature.s)
-    return hash, signature.v, sig_r, sig_s
+
+def to_uint(a):
+    """Takes in value, returns uint256-ish tuple."""
+    return (a & ((1 << 128) - 1), a >> 128)
 
 @pytest.fixture(scope="module")
 def event_loop():
@@ -54,38 +46,15 @@ async def account_factory():
 @pytest.mark.asyncio
 async def test_constructor(account_factory):
     account = account_factory
-    hash, v, r, s = signing(account)
-    x = to_uint(int(pk.public_key[:32].hex(),16))
-    y = to_uint(int(pk.public_key[32:].hex(),16))
-    #int(pubk,0)this is the right way to get the eth address
-    #print( hash, r, s, v)
-    #3390502374062641025540663937380216726131919521463450836644846335041785841004 (70967922200151345553514533283644799340, 300747944610989563154359195732535743235) (196764562288776768217680723670754120955, 92388767693770458896504210395837532470) 0
-    #print( int(pubk,0), pk.public_key, pubk)
-    #public = await account.get_key(x, y).invoke()
-    #print(public.result)
-    test_exec = await account._recover_public_key(to_uint(hash), r, s, v).invoke()#This is not returning the right thing
-    rx = from_uint(test_exec.result.x)
-    ry = from_uint(test_exec.result.y)
-    print('this',from_uint(x),from_uint(y))
-    print('resulting in', rx, ry)
-    execution_info = await account._verify_eth_signature_uint256(int(pubk,0), to_uint(hash), v, r, s).invoke()
-    assert execution_info.result == (signer.public_key,)
-    #150667933682724627262632139063411478963274978545 != this is the one i got
-    #293718746239343348680605004835135740192371701289 son las eth addresses que siempre son diferentes
-    #341450081602188049170303368647362638690376738397
+    k = keccak.new(digest_bits=256)
+    k.update(b'some message')
+    uint_hash = to_uint(int(k.hexdigest(), 16))
+    signature = pk.sign_msg_hash(k.digest())
+    r = to_uint(signature.r)
+    s = to_uint(signature.s)
+    parameter = [signature.v, r[0], r[1], s[0], s[1], uint_hash[0], uint_hash[1]]
+    execution_info = await account.is_valid_eth_signature(int(eth_address,0)).invoke(signature = parameter)
+    print(execution_info.result)
+    assert execution_info.result == (1,)
 
 
-#_recover_public_key returns a diferent point everythime
-#EcPoint(
-#x=BigInt3(d0=42355523410962634072598265, d1=54489418108100514937072803, d2=8284547590306369974861239), 
-#y=BigInt3(d0=35517114584224975643378862, d1=32253362464838751594470283, d2=8216016518097359459525859))
-#)
-
-def from_uint(uint):
-    """Takes in uint256-ish tuple, returns value."""
-    return uint[0] + (uint[1] << 128)
-
-
-def to_uint(a):
-    """Takes in value, returns uint256-ish tuple."""
-    return (a & ((1 << 128) - 1), a >> 128)
