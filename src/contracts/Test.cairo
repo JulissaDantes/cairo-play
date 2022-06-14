@@ -13,6 +13,29 @@ from starkware.cairo.common.cairo_secp.bigint import BigInt3, uint256_to_bigint,
 from starkware.cairo.common.uint256 import Uint256
 from starkware.cairo.common.math import split_felt
 
+@constructor
+func constructor{
+        syscall_ptr : felt*,
+        pedersen_ptr : HashBuiltin*,
+        range_check_ptr
+    }(public_key: felt):
+    Account_public_key.write(public_key)
+    return ()
+end
+
+@storage_var
+func Account_public_key() -> (res: felt):
+end
+
+func get_public_key{
+            syscall_ptr : felt*,
+            pedersen_ptr : HashBuiltin*,
+            range_check_ptr
+        }() -> (res: felt):
+        let (res) = Account_public_key.read()
+        return (res=res)
+end
+
 @external
 func is_valid_eth_signature{
             syscall_ptr : felt*,
@@ -44,5 +67,34 @@ func is_valid_eth_signature{
         end
 
         return (1)
+end
+
+@external
+func execute{
+            syscall_ptr : felt*,
+            pedersen_ptr : HashBuiltin*,
+            range_check_ptr
+        }(      
+        ) -> (response: felt):
+        alloc_locals
+        let (_public_key) = get_public_key()
+        let (caller) = get_caller_address()
+        with_attr error_message("Account: no reentrant call"):
+            assert caller = 0
+        end
+
+        let (__fp__, _) = get_fp_and_pc()
+        let (tx_info) = get_tx_info()
+
+        let (local bitwise_ptr : BitwiseBuiltin*) = alloc()
+        let bitwise_ptr_start = bitwise_ptr
+
+        # validate transaction        
+        let (is_valid) = is_valid_eth_signature{bitwise_ptr=bitwise_ptr}(_public_key)
+        with_attr error_message("Account: custom invalid signature message"):
+            assert is_valid = 1
+        end
+
+        return (response=1)
     end
 
